@@ -47,6 +47,10 @@ history = model.fit(
     validation_split=0.2,
 )
 
+save_directory = './saved_model'
+model.save_pretrained(save_directory)
+tokenizer.save_pretrained(save_directory)
+
 test_predictions = model.predict(
     {"input_ids": X_test_ids, "attention_mask": X_test_masks}
 )
