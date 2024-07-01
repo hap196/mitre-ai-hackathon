@@ -60,38 +60,3 @@ merged_data.to_csv('merged_train_data_with_bert.csv', index=False)
 print("Merged train data with BERT predictions saved to 'merged_train_data_with_bert.csv'.")
 
 merged_train_data = pd.read_csv('merged_train_data_with_bert.csv')
-
-feature_columns = [f'bert_feature_{i}' for i in range(768)] + \
-                  ['url_length', 'num_dots', 'num_hyphens', 'num_slashes', 'num_underscores', 
-                   'contains_gov', 'contains_com', 'contains_org']
-
-X = merged_train_data[feature_columns].fillna(-1)
-y = merged_train_data['phishy']
-
-X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
-
-scaler = StandardScaler()
-X_train = scaler.fit_transform(X_train)
-X_val = scaler.transform(X_val)
-
-joblib.dump(scaler, 'scaler.pkl')
-print("Scaler saved to 'scaler.pkl'.")
-
-model = tf.keras.Sequential([
-    tf.keras.layers.Dense(128, activation='relu', input_shape=(X_train.shape[1],)),
-    tf.keras.layers.Dropout(0.3),
-    tf.keras.layers.Dense(64, activation='relu'),
-    tf.keras.layers.Dropout(0.3),
-    tf.keras.layers.Dense(32, activation='relu'),
-    tf.keras.layers.Dense(1, activation='sigmoid')
-])
-
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-
-history = model.fit(X_train, y_train, epochs=20, batch_size=32, validation_data=(X_val, y_val))
-
-loss, accuracy = model.evaluate(X_val, y_val)
-print(f'Validation Accuracy: {accuracy}')
-
-model.save('trained_combined_model.h5')
-print("Trained model saved to 'trained_combined_model.h5'.")
