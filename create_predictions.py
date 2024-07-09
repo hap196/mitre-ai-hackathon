@@ -5,6 +5,9 @@ import tensorflow as tf
 from transformers import BertTokenizer, TFBertModel
 from sklearn.preprocessing import StandardScaler
 import joblib
+import re
+import math
+from urllib.parse import urlparse, parse_qs
 
 test_data = pd.read_csv("test.csv")
 
@@ -31,6 +34,9 @@ bert_results["id"] = test_data["id"]
 
 def extract_url_features(url):
     features = {}
+    parsed_url = urlparse(url)
+    query_params = parse_qs(parsed_url.query)
+    
     features["url_length"] = len(url)
     features["num_dots"] = url.count(".")
     features["num_hyphens"] = url.count("-")
@@ -39,13 +45,28 @@ def extract_url_features(url):
     features["contains_gov"] = int(".gov" in url)
     features["contains_com"] = int(".com" in url)
     features["contains_org"] = int(".org" in url)
+    features["tld"] = parsed_url.netloc.split(".")[-1] if "." in parsed_url.netloc else ""
+    features["num_query_params"] = len(query_params)
+    features["contains_ip"] = int(re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", parsed_url.netloc) is not None)
+    features["contains_suspicious_word"] = int(any(word in url.lower() for word in ["login", "verify", "account", "update", "secure", "signin", "banking", "password", "confirm"]))
+    features["entropy"] = -sum((url.count(c) / len(url)) * math.log2(url.count(c) / len(url)) for c in set(url))
+    features["path_length"] = len(parsed_url.path)
+    features["query_length"] = len(parsed_url.query)
+    features["num_special_chars"] = sum(1 for c in url if c in "@#%&")
+    features["digit_to_letter_ratio"] = sum(c.isdigit() for c in url) / (sum(c.isalpha() for c in url) + 1)
+    
     return features
 
-
 url_features = test_data["url"].apply(lambda url: pd.Series(extract_url_features(url)))
-print("URL features extracted from entire dataset:\n", url_features.head())
+url_features = pd.get_dummies(url_features, columns=["tld"])
 
-print("Missing values in URL features:\n", url_features.isnull().sum())
+training_columns = joblib.load("training_columns.pkl")
+for col in training_columns:
+    if col not in url_features.columns:
+        url_features[col] = 0
+url_features = url_features[training_columns]
+
+print("URL features extracted from entire dataset:\n", url_features.head())
 
 url_features = url_features.fillna(-1)
 
@@ -55,16 +76,7 @@ print("Columns in test_data after concatenation:\n", test_data.columns)
 feature_columns = (
     ["id"]
     + [f"bert_feature_{i}" for i in range(bert_predictions.shape[1])]
-    + [
-        "url_length",
-        "num_dots",
-        "num_hyphens",
-        "num_slashes",
-        "num_underscores",
-        "contains_gov",
-        "contains_com",
-        "contains_org",
-    ]
+    + list(url_features.columns)
 )
 
 merged_data = pd.merge(
@@ -98,7 +110,7 @@ if "combined_model" in locals():
         }
     )
 
-    final_predictions.to_csv("final_predictions.csv", index=False)
-    print("Final predictions saved to 'final_predictions.csv'.")
+    final_predictions.to_csv("FINAL_PREDS.csv", index=False)
+    print("Final predictions saved to 'FINAL_PREDS.csv'.")
 else:
     print("Model could not be loaded. Predictions were not made.")

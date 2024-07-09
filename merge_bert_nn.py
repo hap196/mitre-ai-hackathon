@@ -6,6 +6,9 @@ from transformers import BertTokenizer, TFBertModel
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import joblib
+import re
+import math
+from urllib.parse import urlparse, parse_qs
 
 train_data = pd.read_csv('train.csv')
 
@@ -30,6 +33,9 @@ print("BERT predictions saved to 'bert_predictions.csv'.")
 
 def extract_url_features(url):
     features = {}
+    parsed_url = urlparse(url)
+    query_params = parse_qs(parsed_url.query)
+    
     features['url_length'] = len(url)
     features['num_dots'] = url.count('.')
     features['num_hyphens'] = url.count('-')
@@ -38,21 +44,33 @@ def extract_url_features(url):
     features['contains_gov'] = int('.gov' in url)
     features['contains_com'] = int('.com' in url)
     features['contains_org'] = int('.org' in url)
+    features['tld'] = parsed_url.netloc.split('.')[-1] if '.' in parsed_url.netloc else ''
+    features['num_query_params'] = len(query_params)
+    features['contains_ip'] = int(re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', parsed_url.netloc) is not None)
+    features['contains_suspicious_word'] = int(any(word in url.lower() for word in ['login', 'verify', 'account', 'update', 'secure', 'signin', 'banking', 'password', 'confirm']))
+    features['entropy'] = -sum((url.count(c) / len(url)) * math.log2(url.count(c) / len(url)) for c in set(url))
+    features['path_length'] = len(parsed_url.path)
+    features['query_length'] = len(parsed_url.query)
+    features['num_special_chars'] = sum(1 for c in url if c in '@#%&')
+    features['digit_to_letter_ratio'] = sum(c.isdigit() for c in url) / (sum(c.isalpha() for c in url) + 1)
+    
     return features
 
 url_features = train_data['url'].apply(lambda url: pd.Series(extract_url_features(url)))
-print("URL features extracted from entire dataset:\n", url_features.head())
+url_features = pd.get_dummies(url_features, columns=['tld'])
 
-print("Missing values in URL features:\n", url_features.isnull().sum())
+print("URL features extracted from entire dataset:\n", url_features.head())
 
 url_features = url_features.fillna(-1)
 
 train_data = pd.concat([train_data, url_features], axis=1)
 print("Columns in train_data after concatenation:\n", train_data.columns)
 
+training_columns = list(url_features.columns)
+joblib.dump(training_columns, "training_columns.pkl")
+print("Training columns saved to 'training_columns.pkl'.")
 
-feature_columns = ['id'] + [f'bert_feature_{i}' for i in range(bert_predictions.shape[1])] + \
-                  ['url_length', 'num_dots', 'num_hyphens', 'num_slashes', 'num_underscores', 'contains_gov', 'contains_com', 'contains_org']
+feature_columns = ['id'] + [f'bert_feature_{i}' for i in range(bert_predictions.shape[1])] + training_columns
 
 merged_data = pd.merge(train_data, bert_results, on='id', how='inner', suffixes=('', '_bert'))
 
@@ -61,9 +79,7 @@ print("Merged train data with BERT predictions saved to 'merged_train_data_with_
 
 merged_train_data = pd.read_csv('merged_train_data_with_bert.csv')
 
-feature_columns = [f'bert_feature_{i}' for i in range(768)] + \
-                  ['url_length', 'num_dots', 'num_hyphens', 'num_slashes', 'num_underscores', 
-                   'contains_gov', 'contains_com', 'contains_org']
+feature_columns = [f'bert_feature_{i}' for i in range(768)] + training_columns
 
 X = merged_train_data[feature_columns].fillna(-1)
 y = merged_train_data['phishy']
