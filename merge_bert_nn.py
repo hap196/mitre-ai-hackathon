@@ -94,17 +94,26 @@ joblib.dump(scaler, 'scaler.pkl')
 print("Scaler saved to 'scaler.pkl'.")
 
 model = tf.keras.Sequential([
-    tf.keras.layers.Dense(128, activation='relu', input_shape=(X_train.shape[1],)),
-    tf.keras.layers.Dropout(0.3),
+    tf.keras.layers.Dense(256, activation='relu', input_shape=(X_train.shape[1],)),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dropout(0.4),
+    tf.keras.layers.Dense(128, activation='relu'),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dropout(0.4),
     tf.keras.layers.Dense(64, activation='relu'),
-    tf.keras.layers.Dropout(0.3),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dropout(0.4),
     tf.keras.layers.Dense(32, activation='relu'),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Dropout(0.4),
     tf.keras.layers.Dense(1, activation='sigmoid')
 ])
 
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001), 
+              loss='binary_crossentropy', 
+              metrics=['accuracy'])
 
-history = model.fit(X_train, y_train, epochs=20, batch_size=32, validation_data=(X_val, y_val))
+history = model.fit(X_train, y_train, epochs=30, batch_size=32, validation_data=(X_val, y_val))
 
 loss, accuracy = model.evaluate(X_val, y_val)
 print(f'Validation Accuracy: {accuracy}')

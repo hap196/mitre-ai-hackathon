@@ -60,6 +60,7 @@ def extract_url_features(url):
 url_features = test_data["url"].apply(lambda url: pd.Series(extract_url_features(url)))
 url_features = pd.get_dummies(url_features, columns=["tld"])
 
+# Align test set features with training set features
 training_columns = joblib.load("training_columns.pkl")
 for col in training_columns:
     if col not in url_features.columns:
